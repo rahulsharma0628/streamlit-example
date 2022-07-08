@@ -1,38 +1,77 @@
-from collections import namedtuple
-import altair as alt
-import math
-import pandas as pd
 import streamlit as st
 
-"""
-# Welcome to Streamlit!
+# from models.kgner import score
 
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:
+import pandas as pd
+import numpy as np
+import os
+# import pymysql as mariadb
 
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
+import spacy
+from spacy import displacy
+nlp = spacy.load('en_core_web_sm')
 
-In the meantime, below is an example of what you can do with just a few lines of code:
-"""
+HTML_WRAPPER = """<div style="overflow-x: auto; border: 1px solid #e6e9ef; border-radius: 0.25rem; padding: 1rem">{}</div>"""
 
 
-with st.echo(code_location='below'):
-    total_points = st.slider("Number of points in spiral", 1, 5000, 2000)
-    num_turns = st.slider("Number of turns in spiral", 1, 100, 9)
+##SQL CONNECTION
 
-    Point = namedtuple('Point', 'x y')
-    data = []
+def sanitize_kgner(text):
+    docx = nlp(text)
+    redacted_sentence = []
+    with docx.retokenize() as retokenizer:
+        for ent in docx.ents:
+            retokenizer.merge(ent)
+    for token in docx:
+        print(f"{token}: {token.ent_type_}")
+        if token.ent_type_ == "PERSON":
+            redacted_sentence.append("[PERSON]")
+        elif token.ent_type_ == "GPE":
+            redacted_sentence.append("[PLACE]")
+        else:
+            redacted_sentence.append(token.text)
+    return " ".join(redacted_sentence)
 
-    points_per_turn = total_points / num_turns
+def extract_entities(text):
+    docx = nlp(text)
+    redacted_sentence = []
+    with docx.retokenize() as retokenizer:
+        for ent in docx.ents:
+            retokenizer.merge(ent)
+    for token in docx:
+        print(f"{token}: {token.ent_type_}")
+        if token.ent_type_ == "PERSON":
+            redacted_sentence.append("[PERSON]")
+        elif token.ent_type_ == "GPE":
+            redacted_sentence.append("[PLACE]")
+        else:
+            redacted_sentence.append(token.text)
+    return " ".join(redacted_sentence)
 
-    for curr_point_num in range(total_points):
-        curr_turn, i = divmod(curr_point_num, points_per_turn)
-        angle = (curr_turn + 1) * 2 * math.pi * i / points_per_turn
-        radius = curr_point_num / total_points
-        x = radius * math.cos(angle)
-        y = radius * math.sin(angle)
-        data.append(Point(x, y))
+# @st.cache(allow_output_mutation=True)
+def render_entities(raw_text):
+    docx = nlp(raw_text)
+    html = displacy.render(docx, style='ent')
+    html = html.replace("\n\n", "\n")
+    result = HTML_WRAPPER.format(html)
+    return result
 
-    st.altair_chart(alt.Chart(pd.DataFrame(data), height=500, width=500)
-        .mark_circle(color='#0068c9', opacity=0.5)
-        .encode(x='x:Q', y='y:Q'))
+def main():
+    st.title("Entity Extraction Local App")
+    # st.text("Built with Spacy and Kgner")
+
+    tasks = ["Extract Entities - Spacy", "Extract Entities - KGNER", "SQL-Connection test", "Sentiment Analysis", "Emotion Detection"]
+    choice = st.sidebar.selectbox("Select task", tasks)
+
+    if choice == "Extract Entities - Spacy":
+        raw_text = st.text_area("Enter your Text", "Type Here")
+        if st.button("Submit"):
+            result = extract_entities(raw_text)
+            st.subheader("Original Text")
+            new_docx = render_entities(raw_text)
+            st.markdown(new_docx, unsafe_allow_html=True)
+
+            st.write(result)
+
+if __name__ == '__main__':
+    main()
